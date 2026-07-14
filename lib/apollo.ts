@@ -157,7 +157,7 @@ async function resolveOrganization(companyName: string): Promise<Organization | 
 }
 
 async function searchPeopleAtOrganization(organizationId: string): Promise<RawPerson[]> {
-  const data = await apolloPost("/mixed_people/search", {
+  const data = await apolloPost("/mixed_people/api_search", {
     organization_ids: [organizationId],
     person_titles: TARGET_TITLES,
     page: 1,
