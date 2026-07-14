@@ -94,7 +94,32 @@ async function apolloPost(path: string, query: Record<string, QueryValue>, body?
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Apollo request to ${path} failed (${res.status}): ${text.slice(0, 300)}`);
+    const detail = text.slice(0, 300);
+    if (res.status === 401) {
+      throw new ApolloUserError(
+        "Apollo rejected the API key (401 Unauthorized). Double-check APOLLO_API_KEY in Vercel — it may be mistyped, revoked, or from a different Apollo workspace.",
+        502
+      );
+    }
+    if (res.status === 403) {
+      throw new ApolloUserError(
+        `Apollo denied access to ${path} (403 Forbidden). Your Apollo plan may not include API access for this endpoint, or the key needs to be a master API key. Apollo said: ${detail}`,
+        502
+      );
+    }
+    if (res.status === 422) {
+      throw new ApolloUserError(
+        `Apollo rejected the request to ${path} (422). Apollo said: ${detail}`,
+        502
+      );
+    }
+    if (res.status === 429) {
+      throw new ApolloUserError(
+        "Apollo rate limit hit (429). Wait a minute and try again, or check your plan's API call limits.",
+        502
+      );
+    }
+    throw new Error(`Apollo request to ${path} failed (${res.status}): ${detail}`);
   }
   return res.json();
 }
