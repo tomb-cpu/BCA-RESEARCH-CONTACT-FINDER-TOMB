@@ -24,9 +24,9 @@ export default function Home() {
       </main>
       <footer className="border-t border-slate-800/80 py-6">
         <p className="mx-auto max-w-5xl px-6 text-xs text-slate-500">
-          Contact data sourced live from Apollo.io. Phone numbers require
-          manual reveal in Apollo (async, credit-metered) and are not
-          returned via this tool.
+          Contact data sourced live from Apollo.io and ContactOut. Each card
+          is tagged with the source(s) it came from; phone numbers come from
+          ContactOut where available.
         </p>
       </footer>
     </div>

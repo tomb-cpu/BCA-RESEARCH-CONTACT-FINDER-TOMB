@@ -1,4 +1,5 @@
 import { MAX_CONTACTS, TARGET_TITLES } from "./targetTitles";
+import { searchContactOut } from "./contactout";
 
 const APOLLO_BASE_URL = "https://api.apollo.io/api/v1";
 const ENRICH_BATCH_SIZE = 10;
@@ -38,9 +39,10 @@ export interface Contact {
   email: string | null;
   emailStatus: string | null;
   phone: string | null;
+  sources: string[];
 }
 
-interface RawPerson {
+export interface RawPerson {
   id: string;
   name?: string;
   first_name?: string;
@@ -51,6 +53,8 @@ interface RawPerson {
   email_status?: string;
   organization?: { name?: string };
   organization_name?: string;
+  phone?: string;
+  sources?: string[];
 }
 
 function apolloHeaders(): Record<string, string> {
@@ -300,39 +304,64 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
   }
   const organization = resolved.primary;
 
-  // Net-new people and already-saved contacts live behind different Apollo
-  // endpoints; query both so previously saved people still appear.
-  const [netNew, saved] = await Promise.all([
+  // Three complementary sources, queried in parallel:
+  //  - Apollo net-new people (strong on LinkedIn + work email)
+  //  - Apollo already-saved contacts (excluded from net-new search)
+  //  - ContactOut (strong on personal email + phone; no-op without a key)
+  const [netNew, saved, contactOut] = await Promise.all([
     searchPeopleAtOrganizations(resolved.ids),
     searchSavedContacts(companyName, resolved.names),
+    searchContactOut([companyName, ...resolved.names]),
   ]);
 
-  // Merge, preferring the saved-contact record (it usually already has an
-  // unlocked email). Dedupe on LinkedIn URL when present, else name+company.
+  const tag = (people: RawPerson[], source: string) =>
+    people.map((p) => ({ ...p, sources: p.sources ?? [source] }));
+
+  // Merge across sources, combining fields so a contact keeps the best data
+  // from each (e.g. LinkedIn+email from Apollo, phone from ContactOut).
+  // Dedupe on LinkedIn URL when present, else normalized name+company.
   const merged = new Map<string, RawPerson>();
-  for (const p of [...netNew, ...saved]) {
+  for (const p of [
+    ...tag(netNew, "Apollo"),
+    ...tag(saved, "Apollo"),
+    ...tag(contactOut, "ContactOut"),
+  ]) {
     const key = p.linkedin_url
       ? p.linkedin_url.toLowerCase().replace(/\/+$/, "")
       : `${normalizeName(p.name ?? `${p.first_name ?? ""}${p.last_name ?? ""}`)}@${normalizeName(
           p.organization?.name ?? p.organization_name ?? ""
         )}`;
     const existing = merged.get(key);
-    if (!existing || (!isRevealedEmail(existing.email) && isRevealedEmail(p.email))) {
+    if (!existing) {
       merged.set(key, p);
+      continue;
     }
+    merged.set(key, {
+      ...existing,
+      // Fill any gaps from the newer record; prefer a revealed email.
+      name: existing.name ?? p.name,
+      title: existing.title ?? p.title,
+      linkedin_url: existing.linkedin_url ?? p.linkedin_url,
+      email: isRevealedEmail(existing.email) ? existing.email : p.email ?? existing.email,
+      email_status: existing.email_status ?? p.email_status,
+      organization_name: existing.organization_name ?? p.organization_name,
+      phone: existing.phone ?? p.phone,
+      sources: [...new Set([...(existing.sources ?? []), ...(p.sources ?? [])])],
+    });
   }
   const rawPeople = [...merged.values()];
 
-  // Rank candidates (LinkedIn presence first) and cut to 20 BEFORE
-  // enrichment, so email credits are only spent on contacts we return.
+  // Rank candidates and cut to 20 BEFORE Apollo email enrichment, so email
+  // credits are only spent on contacts we return.
   const ranked = [...rawPeople].sort((a, b) => {
     const score = (p: RawPerson) =>
-      (p.linkedin_url ? 2 : 0) + (isRevealedEmail(p.email) ? 1 : 0);
+      (p.linkedin_url ? 2 : 0) + (isRevealedEmail(p.email) ? 1 : 0) + (p.phone ? 1 : 0);
     return score(b) - score(a);
   });
   const selected = ranked.slice(0, MAX_CONTACTS);
 
-  const enriched = await enrichEmails(selected);
+  // Only Apollo-sourced records can be enriched via Apollo's IDs.
+  const enriched = await enrichEmails(selected.filter((p) => !p.id.startsWith("contactout:")));
 
   const contacts: Contact[] = selected.map((p) => {
     const unlocked = enriched.get(p.id);
@@ -345,13 +374,14 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
       linkedinUrl: p.linkedin_url ?? null,
       email,
       emailStatus: unlocked?.status ?? p.email_status ?? null,
-      phone: null,
+      phone: p.phone ?? null,
+      sources: p.sources ?? [],
     };
   });
 
-  // Final order: contacts with both LinkedIn and email first.
+  // Final order: most actionable contacts (LinkedIn + email + phone) first.
   contacts.sort((a, b) => {
-    const score = (c: Contact) => (c.linkedinUrl ? 2 : 0) + (c.email ? 1 : 0);
+    const score = (c: Contact) => (c.linkedinUrl ? 2 : 0) + (c.email ? 1 : 0) + (c.phone ? 1 : 0);
     return score(b) - score(a);
   });
 

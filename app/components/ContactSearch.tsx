@@ -18,7 +18,7 @@ function csvEscape(value: string): string {
 }
 
 function downloadCsv(companyName: string, contacts: Contact[]) {
-  const header = ["Name", "Title", "Company", "LinkedIn", "Email", "Phone"];
+  const header = ["Name", "Title", "Company", "LinkedIn", "Email", "Phone", "Sources"];
   const rows = contacts.map((c) => [
     c.name,
     c.title,
@@ -26,6 +26,7 @@ function downloadCsv(companyName: string, contacts: Contact[]) {
     c.linkedinUrl ?? "",
     c.email ?? "",
     c.phone ?? "",
+    (c.sources ?? []).join(" + "),
   ]);
   const csv = [header, ...rows]
     .map((row) => row.map((cell) => csvEscape(cell)).join(","))
@@ -241,11 +242,30 @@ function ContactCard({
   onCopy: (text: string, id: string) => void;
 }) {
   const emailCopyId = `${contact.id}-email`;
+  const phoneCopyId = `${contact.id}-phone`;
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4 transition-colors hover:border-slate-700">
       <div>
-        <h3 className="text-sm font-semibold text-slate-100">{contact.name}</h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-100">{contact.name}</h3>
+          {contact.sources && contact.sources.length > 0 && (
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              {contact.sources.map((s) => (
+                <span
+                  key={s}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    s === "ContactOut"
+                      ? "bg-emerald-500/10 text-emerald-300"
+                      : "bg-sky-500/10 text-sky-300"
+                  }`}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
         <p className="text-xs text-slate-400">{contact.title}</p>
         <p className="text-xs text-slate-500">{contact.company}</p>
       </div>
@@ -284,7 +304,17 @@ function ContactCard({
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-slate-500">Phone</span>
-          <span className="text-slate-600">Reveal in Apollo</span>
+          {contact.phone ? (
+            <button
+              onClick={() => onCopy(contact.phone as string, phoneCopyId)}
+              className="max-w-[160px] truncate rounded-md bg-slate-800 px-2 py-1 font-medium text-slate-200 hover:bg-slate-700"
+              title={contact.phone}
+            >
+              {copiedId === phoneCopyId ? "Copied!" : contact.phone}
+            </button>
+          ) : (
+            <span className="text-slate-600">Not available</span>
+          )}
         </div>
       </div>
     </div>
