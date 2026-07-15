@@ -2,9 +2,9 @@ import { MAX_CONTACTS, TARGET_TITLES } from "./targetTitles";
 
 const APOLLO_BASE_URL = "https://api.apollo.io/api/v1";
 const ENRICH_BATCH_SIZE = 10;
-// Cast a wider net than MAX_CONTACTS so we still land on 20 good contacts
-// even if a few candidates fail enrichment or lack a LinkedIn/email.
-const SEARCH_CANDIDATE_POOL = 40;
+// Cast a wider net than MAX_CONTACTS so ranking has real choices — 100 is
+// Apollo's per-page max and costs the same single search request.
+const SEARCH_CANDIDATE_POOL = 100;
 
 export class ApolloUserError extends Error {
   status: number;
@@ -129,11 +129,27 @@ function isRevealedEmail(email: string | undefined | null): email is string {
   return !email.includes("email_not_unlocked") && !email.includes("not_unlocked@");
 }
 
-async function resolveOrganization(companyName: string): Promise<Organization | null> {
+/** Lowercase and strip punctuation/whitespace so "J.P. Morgan" and
+ * "JPMorgan" compare equal. */
+function normalizeName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+interface ResolvedOrganizations {
+  primary: Organization;
+  /** Primary plus closely related entities (e.g. "J.P. Morgan Asset
+   * Management" alongside "JPMorgan Chase & Co."), searched together so
+   * big firms with many Apollo org records get full coverage. */
+  ids: string[];
+}
+
+const MAX_RELATED_ORGS = 5;
+
+async function resolveOrganizations(companyName: string): Promise<ResolvedOrganizations | null> {
   const data = await apolloPost("/mixed_companies/search", {
     q_organization_name: companyName,
     page: 1,
-    per_page: 10,
+    per_page: 25,
   });
 
   const orgs: Array<{
@@ -141,24 +157,49 @@ async function resolveOrganization(companyName: string): Promise<Organization | 
     name: string;
     website_url?: string;
     linkedin_url?: string;
+    estimated_num_employees?: number;
   }> = data.organizations ?? data.accounts ?? [];
 
   if (!orgs.length) return null;
 
-  const exact = orgs.find((o) => o.name?.toLowerCase() === companyName.trim().toLowerCase());
-  const org = exact ?? orgs[0];
+  const query = normalizeName(companyName);
+  // 3 = exact name match, 2 = one name contains the other (subsidiaries,
+  // alternate spellings), 1 = anything else Apollo considered relevant.
+  const scored = orgs
+    .filter((o) => o.id && o.name)
+    .map((o) => {
+      const name = normalizeName(o.name);
+      const score = name === query ? 3 : name.includes(query) || query.includes(name) ? 2 : 1;
+      return { org: o, score };
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (b.org.estimated_num_employees ?? 0) - (a.org.estimated_num_employees ?? 0)
+    );
+
+  const primary = scored[0].org;
+  // Only widen to name-related entities; never bundle in the score-1
+  // leftovers, which can be entirely different companies.
+  const related = scored
+    .filter((s) => s.score >= 2)
+    .slice(0, MAX_RELATED_ORGS)
+    .map((s) => s.org.id);
 
   return {
-    id: org.id,
-    name: org.name,
-    websiteUrl: org.website_url ?? null,
-    linkedinUrl: org.linkedin_url ?? null,
+    primary: {
+      id: primary.id,
+      name: primary.name,
+      websiteUrl: primary.website_url ?? null,
+      linkedinUrl: primary.linkedin_url ?? null,
+    },
+    ids: related.length ? related : [primary.id],
   };
 }
 
-async function searchPeopleAtOrganization(organizationId: string): Promise<RawPerson[]> {
+async function searchPeopleAtOrganizations(organizationIds: string[]): Promise<RawPerson[]> {
   const data = await apolloPost("/mixed_people/api_search", {
-    organization_ids: [organizationId],
+    organization_ids: organizationIds,
     person_titles: TARGET_TITLES,
     page: 1,
     per_page: SEARCH_CANDIDATE_POOL,
@@ -211,17 +252,28 @@ export interface SearchResult {
 }
 
 export async function searchContacts(companyName: string): Promise<SearchResult> {
-  const organization = await resolveOrganization(companyName);
-  if (!organization) {
+  const resolved = await resolveOrganizations(companyName);
+  if (!resolved) {
     throw new ApolloUserError(
       `No company matching "${companyName}" was found in Apollo's database. Try the exact legal name, or the company's website domain.`
     );
   }
+  const organization = resolved.primary;
 
-  const rawPeople = await searchPeopleAtOrganization(organization.id);
-  const enriched = await enrichEmails(rawPeople);
+  const rawPeople = await searchPeopleAtOrganizations(resolved.ids);
 
-  const contacts: Contact[] = rawPeople.map((p) => {
+  // Rank candidates (LinkedIn presence first) and cut to 20 BEFORE
+  // enrichment, so email credits are only spent on contacts we return.
+  const ranked = [...rawPeople].sort((a, b) => {
+    const score = (p: RawPerson) =>
+      (p.linkedin_url ? 2 : 0) + (isRevealedEmail(p.email) ? 1 : 0);
+    return score(b) - score(a);
+  });
+  const selected = ranked.slice(0, MAX_CONTACTS);
+
+  const enriched = await enrichEmails(selected);
+
+  const contacts: Contact[] = selected.map((p) => {
     const unlocked = enriched.get(p.id);
     const email = unlocked?.email ?? (isRevealedEmail(p.email) ? (p.email as string) : null);
     return {
@@ -236,8 +288,7 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
     };
   });
 
-  // Prioritize contacts that actually have a LinkedIn URL and/or email —
-  // those are the ones a sales rep can act on immediately.
+  // Final order: contacts with both LinkedIn and email first.
   contacts.sort((a, b) => {
     const score = (c: Contact) => (c.linkedinUrl ? 2 : 0) + (c.email ? 1 : 0);
     return score(b) - score(a);
@@ -245,7 +296,7 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
 
   return {
     organization,
-    contacts: contacts.slice(0, MAX_CONTACTS),
+    contacts,
     candidatesFound: rawPeople.length,
   };
 }
