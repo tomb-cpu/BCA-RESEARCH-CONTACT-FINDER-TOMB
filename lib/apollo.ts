@@ -50,6 +50,7 @@ interface RawPerson {
   email?: string;
   email_status?: string;
   organization?: { name?: string };
+  organization_name?: string;
 }
 
 function apolloHeaders(): Record<string, string> {
@@ -141,6 +142,7 @@ interface ResolvedOrganizations {
    * Management" alongside "JPMorgan Chase & Co."), searched together so
    * big firms with many Apollo org records get full coverage. */
   ids: string[];
+  names: string[];
 }
 
 const MAX_RELATED_ORGS = 5;
@@ -181,10 +183,7 @@ async function resolveOrganizations(companyName: string): Promise<ResolvedOrgani
   const primary = scored[0].org;
   // Only widen to name-related entities; never bundle in the score-1
   // leftovers, which can be entirely different companies.
-  const related = scored
-    .filter((s) => s.score >= 2)
-    .slice(0, MAX_RELATED_ORGS)
-    .map((s) => s.org.id);
+  const related = scored.filter((s) => s.score >= 2).slice(0, MAX_RELATED_ORGS);
 
   return {
     primary: {
@@ -193,8 +192,49 @@ async function resolveOrganizations(companyName: string): Promise<ResolvedOrgani
       websiteUrl: primary.website_url ?? null,
       linkedinUrl: primary.linkedin_url ?? null,
     },
-    ids: related.length ? related : [primary.id],
+    ids: related.length ? related.map((s) => s.org.id) : [primary.id],
+    names: related.length ? related.map((s) => s.org.name) : [primary.name],
   };
+}
+
+// Regexes matching each target title as a phrase (word-bounded, tolerant of
+// spacing/hyphen differences), used to filter saved contacts client-side.
+const TITLE_PATTERNS = TARGET_TITLES.map((t) => {
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[\s-]+/g, "[\\s-]*");
+  return new RegExp(`\\b${escaped}\\b`, "i");
+});
+
+function matchesTargetTitle(title: string | undefined): boolean {
+  if (!title) return false;
+  return TITLE_PATTERNS.some((re) => re.test(title));
+}
+
+/** Apollo's people api_search only returns "net-new" people — anyone your
+ * team already saved as a contact (e.g. via a previous tool or the Apollo
+ * UI) is excluded. This searches those saved contacts so they still show
+ * up in results. Best-effort: failures just mean fewer sources. */
+async function searchSavedContacts(
+  companyName: string,
+  orgNames: string[]
+): Promise<RawPerson[]> {
+  try {
+    const data = await apolloPost("/contacts/search", {
+      q_keywords: companyName,
+      page: 1,
+      per_page: SEARCH_CANDIDATE_POOL,
+    });
+    const contacts: RawPerson[] = data.contacts ?? [];
+    const wanted = [normalizeName(companyName), ...orgNames.map(normalizeName)];
+    return contacts.filter((c) => {
+      if (!c.id || !matchesTargetTitle(c.title)) return false;
+      const org = normalizeName(c.organization?.name ?? c.organization_name ?? "");
+      if (!org) return false;
+      return wanted.some((w) => org.includes(w) || w.includes(org));
+    });
+  } catch (err) {
+    console.error("Apollo saved-contacts search failed:", err);
+    return [];
+  }
 }
 
 async function searchPeopleAtOrganizations(organizationIds: string[]): Promise<RawPerson[]> {
@@ -260,7 +300,28 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
   }
   const organization = resolved.primary;
 
-  const rawPeople = await searchPeopleAtOrganizations(resolved.ids);
+  // Net-new people and already-saved contacts live behind different Apollo
+  // endpoints; query both so previously saved people still appear.
+  const [netNew, saved] = await Promise.all([
+    searchPeopleAtOrganizations(resolved.ids),
+    searchSavedContacts(companyName, resolved.names),
+  ]);
+
+  // Merge, preferring the saved-contact record (it usually already has an
+  // unlocked email). Dedupe on LinkedIn URL when present, else name+company.
+  const merged = new Map<string, RawPerson>();
+  for (const p of [...netNew, ...saved]) {
+    const key = p.linkedin_url
+      ? p.linkedin_url.toLowerCase().replace(/\/+$/, "")
+      : `${normalizeName(p.name ?? `${p.first_name ?? ""}${p.last_name ?? ""}`)}@${normalizeName(
+          p.organization?.name ?? p.organization_name ?? ""
+        )}`;
+    const existing = merged.get(key);
+    if (!existing || (!isRevealedEmail(existing.email) && isRevealedEmail(p.email))) {
+      merged.set(key, p);
+    }
+  }
+  const rawPeople = [...merged.values()];
 
   // Rank candidates (LinkedIn presence first) and cut to 20 BEFORE
   // enrichment, so email credits are only spent on contacts we return.
@@ -280,7 +341,7 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
       id: p.id,
       name: p.name?.trim() || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Unknown",
       title: p.title ?? "—",
-      company: p.organization?.name ?? organization.name,
+      company: p.organization?.name ?? p.organization_name ?? organization.name,
       linkedinUrl: p.linkedin_url ?? null,
       email,
       emailStatus: unlocked?.status ?? p.email_status ?? null,
