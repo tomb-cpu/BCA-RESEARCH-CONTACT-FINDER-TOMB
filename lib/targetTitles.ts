@@ -16,7 +16,26 @@ export const TARGET_TITLES = [
   "Portfolio Allocation",
   "Discretionary Portfolio Manager",
   "Chief Investment Officer",
-  "CIO",
+] as const;
+
+// Titles to reject even if they slip past the positive match above (e.g. via
+// Apollo's similar-title expansion or an unfiltered ContactOut result).
+// Matched as case-insensitive substrings against the person's title.
+export const EXCLUDED_TITLE_KEYWORDS = [
+  "assistant",
+  "intern",
+  "trainee",
+  "apprentice",
+  "student",
+  "data analyst",
+  "data analytics",
+  "data scientist",
+  "information officer",
+  "information technology",
+  "software",
+  "developer",
+  "recruit",
+  "receptionist",
 ] as const;
 
 export const TARGET_FIRM_TYPES = [

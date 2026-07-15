@@ -1,4 +1,4 @@
-import { MAX_CONTACTS, TARGET_TITLES } from "./targetTitles";
+import { EXCLUDED_TITLE_KEYWORDS, MAX_CONTACTS, TARGET_TITLES } from "./targetTitles";
 import { searchContactOut } from "./contactout";
 
 const APOLLO_BASE_URL = "https://api.apollo.io/api/v1";
@@ -213,6 +213,29 @@ function matchesTargetTitle(title: string | undefined): boolean {
   return TITLE_PATTERNS.some((re) => re.test(title));
 }
 
+function isExcludedTitle(title: string | undefined): boolean {
+  if (!title) return false;
+  const lower = title.toLowerCase();
+  return EXCLUDED_TITLE_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+/** A title is relevant when it matches one of the target titles AND isn't on
+ * the exclusion list. Applied to every source so junk titles (research
+ * assistants, data analysts, IT roles) can't reach the results regardless of
+ * where they came from. */
+function isRelevantTitle(title: string | undefined): boolean {
+  return matchesTargetTitle(title) && !isExcludedTitle(title);
+}
+
+/** True when a person's employer name matches one of the wanted (normalized)
+ * company names. Guards against sources returning people from the wrong
+ * company (e.g. ContactOut occasionally returns unrelated/sample records). */
+function personAtCompany(person: RawPerson, wantedNormalized: string[]): boolean {
+  const org = normalizeName(person.organization?.name ?? person.organization_name ?? "");
+  if (!org) return false;
+  return wantedNormalized.some((w) => w && (org.includes(w) || w.includes(org)));
+}
+
 /** Apollo's people api_search only returns "net-new" people — anyone your
  * team already saved as a contact (e.g. via a previous tool or the Apollo
  * UI) is excluded. This searches those saved contacts so they still show
@@ -229,12 +252,9 @@ async function searchSavedContacts(
     });
     const contacts: RawPerson[] = data.contacts ?? [];
     const wanted = [normalizeName(companyName), ...orgNames.map(normalizeName)];
-    return contacts.filter((c) => {
-      if (!c.id || !matchesTargetTitle(c.title)) return false;
-      const org = normalizeName(c.organization?.name ?? c.organization_name ?? "");
-      if (!org) return false;
-      return wanted.some((w) => org.includes(w) || w.includes(org));
-    });
+    return contacts.filter(
+      (c) => c.id && isRelevantTitle(c.title) && personAtCompany(c, wanted)
+    );
   } catch (err) {
     console.error("Apollo saved-contacts search failed:", err);
     return [];
@@ -323,11 +343,22 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
   //  - Apollo net-new people (strong on LinkedIn + work email)
   //  - Apollo already-saved contacts (excluded from net-new search)
   //  - ContactOut (strong on personal email + phone; no-op without a key)
-  const [netNew, saved, contactOut] = await Promise.all([
+  const [rawNetNew, saved, rawContactOut] = await Promise.all([
     searchPeopleAtOrganizations(resolved.ids),
     searchSavedContacts(companyName, resolved.names),
     searchContactOut([companyName, ...resolved.names]),
   ]);
+
+  const wanted = [normalizeName(companyName), ...resolved.names.map(normalizeName)];
+
+  // Net-new people are already scoped to the right org IDs by Apollo, but
+  // similar-title expansion can pull off-target roles — keep only relevant
+  // titles. ContactOut needs both a title AND a company check, since it can
+  // return unrelated/sample records.
+  const netNew = rawNetNew.filter((p) => isRelevantTitle(p.title));
+  const contactOut = rawContactOut.filter(
+    (p) => isRelevantTitle(p.title) && personAtCompany(p, wanted)
+  );
 
   const diagnostics: SearchDiagnostics = {
     apolloNetNew: netNew.length,
