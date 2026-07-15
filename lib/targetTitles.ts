@@ -26,4 +26,4 @@ export const TARGET_FIRM_TYPES = [
   "Family Office",
 ] as const;
 
-export const MAX_CONTACTS = 20;
+export const MAX_CONTACTS = 50;

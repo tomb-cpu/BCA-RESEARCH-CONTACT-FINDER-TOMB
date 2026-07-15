@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { Contact, Organization } from "@/lib/apollo";
+import type { Contact, Organization, SearchDiagnostics } from "@/lib/apollo";
 import { TARGET_TITLES } from "@/lib/targetTitles";
 
 interface SearchResponse {
   organization: Organization;
   contacts: Contact[];
   candidatesFound: number;
+  diagnostics?: SearchDiagnostics;
 }
 
 function csvEscape(value: string): string {
@@ -175,14 +176,17 @@ function ResultsSection({
   copiedId: string | null;
   onCopy: (text: string, id: string) => void;
 }) {
-  const { organization, contacts, candidatesFound } = result;
+  const { organization, contacts, candidatesFound, diagnostics } = result;
 
   if (contacts.length === 0) {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-400">
-        Found <span className="font-medium text-slate-200">{organization.name}</span> in
-        Apollo, but no one matching the target titles turned up. Try a parent
-        company name or a broader entity.
+      <div className="flex flex-col gap-3">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-400">
+          Found <span className="font-medium text-slate-200">{organization.name}</span> in
+          Apollo, but no one matching the target titles turned up. Try a parent
+          company name or a broader entity.
+        </div>
+        {diagnostics && <DiagnosticsLine diagnostics={diagnostics} />}
       </div>
     );
   }
@@ -218,6 +222,8 @@ function ResultsSection({
         </button>
       </div>
 
+      {diagnostics && <DiagnosticsLine diagnostics={diagnostics} />}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {contacts.map((contact) => (
           <ContactCard
@@ -229,6 +235,28 @@ function ResultsSection({
         ))}
       </div>
     </div>
+  );
+}
+
+function DiagnosticsLine({ diagnostics }: { diagnostics: SearchDiagnostics }) {
+  const { apolloNetNew, apolloSaved, contactOut, contactOutEnabled, orgsMatched } = diagnostics;
+  return (
+    <details className="rounded-lg border border-slate-800/70 bg-slate-900/30 px-3 py-2 text-xs text-slate-500">
+      <summary className="cursor-pointer select-none text-slate-400">
+        Sources: Apollo {apolloNetNew + apolloSaved} · ContactOut{" "}
+        {contactOutEnabled ? contactOut : "off"}
+      </summary>
+      <ul className="mt-2 space-y-1 pl-1">
+        <li>Apollo net-new people: {apolloNetNew}</li>
+        <li>Apollo saved contacts: {apolloSaved}</li>
+        <li>
+          ContactOut: {contactOutEnabled ? contactOut : "no API key set (add CONTACTOUT_API_KEY)"}
+        </li>
+        <li>
+          Matched company records: {orgsMatched.length ? orgsMatched.join(", ") : "none"}
+        </li>
+      </ul>
+    </details>
   );
 }
 

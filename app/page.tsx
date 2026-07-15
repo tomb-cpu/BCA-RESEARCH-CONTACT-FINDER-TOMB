@@ -12,7 +12,7 @@ export default function Home() {
             BCA Contact Finder
           </h1>
           <p className="max-w-2xl text-sm text-slate-400">
-            Enter a firm name to pull up to 20 investment decision-makers —
+            Enter a firm name to pull up to 50 investment decision-makers —
             portfolio managers, CIOs, and allocators — at asset managers,
             hedge funds, private equity firms, and family offices, complete
             with title, LinkedIn, and email.

@@ -245,6 +245,10 @@ async function searchPeopleAtOrganizations(organizationIds: string[]): Promise<R
   const data = await apolloPost("/mixed_people/api_search", {
     organization_ids: organizationIds,
     person_titles: TARGET_TITLES,
+    // Expand to closely-related job titles (e.g. "Portfolio Manager,
+    // Equities") instead of only exact matches — meaningfully widens
+    // coverage, especially at non-US firms with varied title formats.
+    include_similar_titles: true,
     page: 1,
     per_page: SEARCH_CANDIDATE_POOL,
   });
@@ -289,10 +293,21 @@ async function enrichEmails(people: RawPerson[]): Promise<Map<string, { email: s
   return result;
 }
 
+export interface SearchDiagnostics {
+  /** Raw candidate counts per source, before dedupe/merge. */
+  apolloNetNew: number;
+  apolloSaved: number;
+  contactOut: number;
+  contactOutEnabled: boolean;
+  /** Names of the Apollo org entities the company resolved to. */
+  orgsMatched: string[];
+}
+
 export interface SearchResult {
   organization: Organization;
   contacts: Contact[];
   candidatesFound: number;
+  diagnostics: SearchDiagnostics;
 }
 
 export async function searchContacts(companyName: string): Promise<SearchResult> {
@@ -313,6 +328,14 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
     searchSavedContacts(companyName, resolved.names),
     searchContactOut([companyName, ...resolved.names]),
   ]);
+
+  const diagnostics: SearchDiagnostics = {
+    apolloNetNew: netNew.length,
+    apolloSaved: saved.length,
+    contactOut: contactOut.length,
+    contactOutEnabled: Boolean(process.env.CONTACTOUT_API_KEY),
+    orgsMatched: resolved.names,
+  };
 
   const tag = (people: RawPerson[], source: string) =>
     people.map((p) => ({ ...p, sources: p.sources ?? [source] }));
@@ -389,5 +412,6 @@ export async function searchContacts(companyName: string): Promise<SearchResult>
     organization,
     contacts,
     candidatesFound: rawPeople.length,
+    diagnostics,
   };
 }
