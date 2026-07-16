@@ -93,13 +93,13 @@ export default function ContactSearch() {
           value={companyName}
           onChange={(e) => setCompanyName(e.target.value)}
           placeholder="e.g. Bridgewater Associates"
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          className="flex-1 rounded-lg border border-line bg-marine px-4 py-3 text-sm text-bwhite placeholder:text-seaglass/70 outline-none focus:border-jade focus:ring-1 focus:ring-jade"
           autoFocus
         />
         <button
           type="submit"
           disabled={!canSearch}
-          className="inline-flex items-center justify-center rounded-lg bg-indigo-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          className="inline-flex items-center justify-center rounded-lg bg-jade px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-jade-400 disabled:cursor-not-allowed disabled:bg-marine-lift disabled:text-seaglass"
         >
           {loading ? "Searching…" : "Find contacts"}
         </button>
@@ -110,7 +110,7 @@ export default function ContactSearch() {
       {loading && <LoadingSkeleton />}
 
       {error && (
-        <div className="rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-lg border border-[#7A6855]/60 bg-[#473729]/30 px-4 py-3 text-sm text-[#D7B8A0]">
           {error}
         </div>
       )}
@@ -129,15 +129,15 @@ export default function ContactSearch() {
 
 function TargetTitlesDisclosure() {
   return (
-    <details className="group rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3 text-sm text-slate-400">
-      <summary className="cursor-pointer select-none font-medium text-slate-300">
+    <details className="group rounded-lg border border-line bg-marine/50 px-4 py-3 text-sm text-aqua">
+      <summary className="cursor-pointer select-none font-medium text-bwhite">
         Target titles ({TARGET_TITLES.length})
       </summary>
       <div className="mt-3 flex flex-wrap gap-2">
         {TARGET_TITLES.map((title) => (
           <span
             key={title}
-            className="rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1 text-xs text-slate-300"
+            className="rounded-full border border-line bg-marine-lift/60 px-3 py-1 text-xs text-aqua"
           >
             {title}
           </span>
@@ -153,12 +153,12 @@ function LoadingSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="animate-pulse rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+          className="animate-pulse rounded-xl border border-line bg-marine/50 p-4"
         >
-          <div className="h-4 w-2/3 rounded bg-slate-800" />
-          <div className="mt-2 h-3 w-1/2 rounded bg-slate-800" />
-          <div className="mt-4 h-3 w-full rounded bg-slate-800" />
-          <div className="mt-2 h-3 w-3/4 rounded bg-slate-800" />
+          <div className="h-4 w-2/3 rounded bg-marine-lift" />
+          <div className="mt-2 h-3 w-1/2 rounded bg-marine-lift" />
+          <div className="mt-4 h-3 w-full rounded bg-marine-lift" />
+          <div className="mt-2 h-3 w-3/4 rounded bg-marine-lift" />
         </div>
       ))}
     </div>
@@ -181,8 +181,8 @@ function ResultsSection({
   if (contacts.length === 0) {
     return (
       <div className="flex flex-col gap-3">
-        <div className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-6 text-center text-sm text-slate-400">
-          Found <span className="font-medium text-slate-200">{organization.name}</span> in
+        <div className="rounded-lg border border-line bg-marine/50 px-4 py-6 text-center text-sm text-aqua">
+          Found <span className="font-medium text-bwhite">{organization.name}</span> in
           Apollo, but no one matching the target titles turned up. Try a parent
           company name or a broader entity.
         </div>
@@ -195,8 +195,8 @@ function ResultsSection({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">{organization.name}</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="font-display text-xl font-bold text-bwhite">{organization.name}</h2>
+          <p className="text-xs text-seaglass">
             {contacts.length} contact{contacts.length === 1 ? "" : "s"} shown
             {candidatesFound > contacts.length ? ` · ${candidatesFound} candidates found` : ""}
             {organization.websiteUrl ? (
@@ -206,7 +206,7 @@ function ResultsSection({
                   href={organization.websiteUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-400 hover:underline"
+                  className="text-jade hover:underline"
                 >
                   {organization.websiteUrl.replace(/^https?:\/\//, "")}
                 </a>
@@ -216,7 +216,7 @@ function ResultsSection({
         </div>
         <button
           onClick={() => downloadCsv(companyName, contacts)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-medium text-slate-200 hover:border-indigo-500 hover:text-indigo-300"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-marine px-4 py-2 text-xs font-medium text-bwhite hover:border-jade hover:text-jade-300"
         >
           Export CSV
         </button>
@@ -241,8 +241,8 @@ function ResultsSection({
 function DiagnosticsLine({ diagnostics }: { diagnostics: SearchDiagnostics }) {
   const { apolloNetNew, apolloSaved, contactOut, contactOutEnabled, orgsMatched } = diagnostics;
   return (
-    <details className="rounded-lg border border-slate-800/70 bg-slate-900/30 px-3 py-2 text-xs text-slate-500">
-      <summary className="cursor-pointer select-none text-slate-400">
+    <details className="rounded-lg border border-line/70 bg-marine/30 px-3 py-2 text-xs text-seaglass">
+      <summary className="cursor-pointer select-none text-aqua">
         Sources: Apollo {apolloNetNew + apolloSaved} · ContactOut{" "}
         {contactOutEnabled ? contactOut : "off"}
       </summary>
@@ -273,10 +273,10 @@ function ContactCard({
   const phoneCopyId = `${contact.id}-phone`;
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4 transition-colors hover:border-slate-700">
+    <div className="flex flex-col gap-3 rounded-xl border border-line bg-marine/50 p-4 transition-colors hover:border-jade/50">
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-100">{contact.name}</h3>
+          <h3 className="text-sm font-semibold text-bwhite">{contact.name}</h3>
           {contact.sources && contact.sources.length > 0 && (
             <div className="flex shrink-0 flex-wrap justify-end gap-1">
               {contact.sources.map((s) => (
@@ -284,8 +284,8 @@ function ContactCard({
                   key={s}
                   className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     s === "ContactOut"
-                      ? "bg-emerald-500/10 text-emerald-300"
-                      : "bg-sky-500/10 text-sky-300"
+                      ? "bg-jade/15 text-jade-300"
+                      : "bg-aegean/20 text-aqua"
                   }`}
                 >
                   {s}
@@ -294,54 +294,54 @@ function ContactCard({
             </div>
           )}
         </div>
-        <p className="text-xs text-slate-400">{contact.title}</p>
-        <p className="text-xs text-slate-500">{contact.company}</p>
+        <p className="text-xs text-aqua">{contact.title}</p>
+        <p className="text-xs text-seaglass">{contact.company}</p>
       </div>
 
       <div className="flex flex-col gap-1.5 text-xs">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-500">LinkedIn</span>
+          <span className="text-seaglass">LinkedIn</span>
           {contact.linkedinUrl ? (
             <a
               href={contact.linkedinUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-md bg-indigo-500/10 px-2 py-1 font-medium text-indigo-300 hover:bg-indigo-500/20"
+              className="rounded-md bg-jade/10 px-2 py-1 font-medium text-jade-300 hover:bg-jade/20"
             >
               View profile
             </a>
           ) : (
-            <span className="text-slate-600">Not available</span>
+            <span className="text-tiber">Not available</span>
           )}
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-500">Email</span>
+          <span className="text-seaglass">Email</span>
           {contact.email ? (
             <button
               onClick={() => onCopy(contact.email as string, emailCopyId)}
-              className="max-w-[160px] truncate rounded-md bg-slate-800 px-2 py-1 font-medium text-slate-200 hover:bg-slate-700"
+              className="max-w-[160px] truncate rounded-md bg-marine-lift px-2 py-1 font-medium text-bwhite hover:bg-line"
               title={contact.email}
             >
               {copiedId === emailCopyId ? "Copied!" : contact.email}
             </button>
           ) : (
-            <span className="text-slate-600">Not unlocked</span>
+            <span className="text-tiber">Not unlocked</span>
           )}
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-500">Phone</span>
+          <span className="text-seaglass">Phone</span>
           {contact.phone ? (
             <button
               onClick={() => onCopy(contact.phone as string, phoneCopyId)}
-              className="max-w-[160px] truncate rounded-md bg-slate-800 px-2 py-1 font-medium text-slate-200 hover:bg-slate-700"
+              className="max-w-[160px] truncate rounded-md bg-marine-lift px-2 py-1 font-medium text-bwhite hover:bg-line"
               title={contact.phone}
             >
               {copiedId === phoneCopyId ? "Copied!" : contact.phone}
             </button>
           ) : (
-            <span className="text-slate-600">Not available</span>
+            <span className="text-tiber">Not available</span>
           )}
         </div>
       </div>

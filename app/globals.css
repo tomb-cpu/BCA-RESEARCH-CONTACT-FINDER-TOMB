@@ -1,19 +1,39 @@
 @import "tailwindcss";
 
-:root {
-  --background: #0b1120;
-  --foreground: #e5e9f0;
+/* BCA Research brand palette (from BCA Styleguide v05).
+   Primary: Jade / Deep Marine / Bright White.
+   Secondary blues + warm neutrals used for support and data tags. */
+@theme inline {
+  /* Deep Marine family (backgrounds / surfaces) */
+  --color-ink: #08262b; /* page base — a shade below Deep Marine */
+  --color-marine: #0d383f; /* Deep Marine — surfaces/header */
+  --color-marine-lift: #114851; /* lifted surface / hover */
+  --color-line: #1d4f58; /* borders on dark */
+
+  /* Jade (primary accent) */
+  --color-jade: #00b287;
+  --color-jade-400: #33c3a0;
+  --color-jade-300: #66d2b8;
+
+  /* Neutrals / text */
+  --color-bwhite: #f4f5f0; /* Bright White — primary text */
+  --color-aqua: #a6bbc8; /* secondary text */
+  --color-seaglass: #7a99ac; /* muted labels */
+  --color-aegean: #4f758b; /* Apollo tag / secondary accent */
+  --color-tiber: #425563;
+  --color-warm: #bfb8af; /* warm neutral */
+
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-sans: Arial, Helvetica, system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --background: var(--color-ink);
+  --foreground: var(--color-bwhite);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-bwhite);
+  font-family: var(--font-sans);
 }
